@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>ClaudeIPGuard</AssemblyName>
+    <RootNamespace>ClaudeIPGuard</RootNamespace>
+    <Version>2.3.0</Version>
+    <AssemblyTitle>ClaudeIPGuard</AssemblyTitle>
+    <Product>ClaudeIPGuard</Product>
+    <Description>Windows system tray monitor for Claude AI IP purity, DNS/IPv6/STUN leak checks, route consistency and local HTTP API</Description>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <LangVersion>7.3</LangVersion>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+</Project>

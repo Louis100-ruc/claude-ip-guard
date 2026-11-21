@@ -1,0 +1,330 @@
+<Window x:Class="ClaudeIPGuard.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ClaudeIPGuard"
+        Width="444"
+        SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        FontFamily="Microsoft YaHei UI, Segoe UI, sans-serif">
+
+    <Window.Resources>
+        <Style x:Key="CardBorder" TargetType="Border">
+            <Setter Property="Background" Value="#1E2128"/>
+            <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="11,9"/>
+        </Style>
+
+        <Style x:Key="IconBtn" TargetType="Button">
+            <Setter Property="Background" Value="#2A2E37"/>
+            <Setter Property="Foreground" Value="#E6E9EF"/>
+            <Setter Property="BorderBrush" Value="#26FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#3A404D"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="RowLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#9BA1AE"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="MinWidth" Value="78"/>
+        </Style>
+
+        <Style x:Key="RowDivider" TargetType="Border">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Background" Value="#14FFFFFF"/>
+            <Setter Property="Margin" Value="0,5"/>
+        </Style>
+    </Window.Resources>
+
+    <Border Margin="10"
+            Background="#F715171C"
+            BorderBrush="#2CFFFFFF"
+            BorderThickness="1"
+            CornerRadius="14"
+            MouseLeftButtonDown="RootBorder_MouseLeftButtonDown">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.45" Color="#000000"/>
+        </Border.Effect>
+
+        <Grid>
+            <StackPanel Margin="14">
+
+                <!-- 1. Top Status Banner -->
+                <Border x:Name="BannerBorder" CornerRadius="10" Padding="10,9" BorderThickness="1"
+                        Background="#1822C55E" BorderBrush="#4022C55E">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border x:Name="BannerIconBg" Width="34" Height="34" CornerRadius="17" Background="#2822C55E" Margin="0,0,10,0">
+                            <TextBlock x:Name="BannerIconText" Text="✓" FontSize="16" FontWeight="Bold"
+                                       Foreground="#22C55E" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="BannerTitle" Text="正在实时检测网络..." FontSize="13" FontWeight="SemiBold"
+                                       Foreground="#F3F5F8" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="BannerSummary" Text="等待首次检测" FontSize="11" Margin="0,2,0,0"
+                                       Foreground="#A0A6B4" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                            <Button x:Name="RefreshBtn" Style="{StaticResource IconBtn}" Content="↻" FontSize="14"
+                                    ToolTip="立即重新检测" Click="RefreshBtn_Click" Margin="0,0,6,0"/>
+                            <Button x:Name="PinBtn" Style="{StaticResource IconBtn}" Content="📌" FontSize="11"
+                                    ToolTip="钉在桌面角落（常驻浮窗）" Click="PinBtn_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 2. Red / Yellow AI Fix Prompt Action Bar -->
+                <Border x:Name="AiFixBar" Visibility="Collapsed" Margin="0,9,0,0"
+                        CornerRadius="10" Padding="10,8" BorderThickness="1"
+                        Background="#1CEF4444" BorderBrush="#55EF4444">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,8,0">
+                            <TextBlock x:Name="AiFixTitle" Text="高危警报 · 发现 1 项异常" FontSize="11.5" FontWeight="SemiBold"
+                                       Foreground="#F87171" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="已生成专属修复指令，粘贴给 AI 自动排查节点/配置" FontSize="10" Margin="0,2,0,0"
+                                       Foreground="#A0A6B4" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <Button x:Name="CopyPromptBtn" Grid.Column="1" Content="✨ 复制 Prompt" FontSize="11" FontWeight="SemiBold"
+                                Foreground="White" Background="#EF4444" BorderThickness="0" Padding="10,5" Cursor="Hand"
+                                Click="CopyPromptBtn_Click" ToolTip="复制针对当前异常生成的 AI 修复 Prompt">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- 3. 2x2 Leak Guard Matrix Card -->
+                <Border Style="{StaticResource CardBorder}" Margin="0,9,0,0">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,8">
+                            <TextBlock Text="🛡 泄露与分流红线体检" FontSize="11.5" FontWeight="SemiBold" Foreground="#A0A6B4" VerticalAlignment="Center"/>
+                            <Border x:Name="LeakSummaryBadge" DockPanel.Dock="Right" HorizontalAlignment="Right"
+                                    CornerRadius="9" Padding="8,2" Background="#2422C55E">
+                                <TextBlock x:Name="LeakSummaryText" Text="检测中" FontSize="10.5" FontWeight="SemiBold" Foreground="#22C55E"/>
+                            </Border>
+                        </DockPanel>
+
+                        <UniformGrid Columns="2" Rows="2">
+                            <!-- DNS Tile -->
+                            <Border x:Name="DnsTile" Margin="0,0,4,4" CornerRadius="8" Padding="8,6" BorderThickness="1"
+                                    Background="#1422C55E" BorderBrush="#3822C55E" Cursor="Hand" MouseLeftButtonUp="DnsTile_Click">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="DnsDot" Width="6.5" Height="6.5" Fill="#22C55E" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="DNS 泄露" FontSize="10.5" Foreground="#A0A6B4"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="DnsValue" Text="检测中" FontSize="11.5" FontWeight="SemiBold" Foreground="#F3F5F8" Margin="0,3,0,1" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="DnsSub" Text="-" FontSize="10" Foreground="#8C93A1" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- IPv6 Tile -->
+                            <Border x:Name="Ipv6Tile" Margin="4,0,0,4" CornerRadius="8" Padding="8,6" BorderThickness="1"
+                                    Background="#1422C55E" BorderBrush="#3822C55E">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="Ipv6Dot" Width="6.5" Height="6.5" Fill="#22C55E" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="IPv6 泄露" FontSize="10.5" Foreground="#A0A6B4"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="Ipv6Value" Text="检测中" FontSize="11.5" FontWeight="SemiBold" Foreground="#F3F5F8" Margin="0,3,0,1" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="Ipv6Sub" Text="-" FontSize="10" Foreground="#8C93A1" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- STUN Tile -->
+                            <Border x:Name="StunTile" Margin="0,4,4,0" CornerRadius="8" Padding="8,6" BorderThickness="1"
+                                    Background="#1422C55E" BorderBrush="#3822C55E">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="StunDot" Width="6.5" Height="6.5" Fill="#22C55E" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="UDP / STUN" FontSize="10.5" Foreground="#A0A6B4"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="StunValue" Text="检测中" FontSize="11.5" FontWeight="SemiBold" Foreground="#F3F5F8" Margin="0,3,0,1" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="StunSub" Text="-" FontSize="10" Foreground="#8C93A1" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Route Consistency Tile -->
+                            <Border x:Name="RouteTile" Margin="4,4,0,0" CornerRadius="8" Padding="8,6" BorderThickness="1"
+                                    Background="#1422C55E" BorderBrush="#3822C55E">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="RouteDot" Width="6.5" Height="6.5" Fill="#22C55E" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="全站路由一致" FontSize="10.5" Foreground="#A0A6B4"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="RouteValue" Text="检测中" FontSize="11.5" FontWeight="SemiBold" Foreground="#F3F5F8" Margin="0,3,0,1" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="RouteSub" Text="-" FontSize="10" Foreground="#8C93A1" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 4. Claude Exit IP & Purity Card -->
+                <Border Style="{StaticResource CardBorder}" Margin="0,9,0,0">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,7">
+                            <TextBlock Text="🌐 Claude AI 出口与纯净度" FontSize="11.5" FontWeight="SemiBold" Foreground="#A0A6B4" VerticalAlignment="Center"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Border x:Name="RiskScoreBadge" CornerRadius="9" Padding="7,2" Background="#2422C55E" Margin="0,0,5,0">
+                                    <TextBlock x:Name="RiskScoreText" Text="风险分 0/100" FontSize="10.5" FontWeight="SemiBold" Foreground="#22C55E"/>
+                                </Border>
+                                <Border x:Name="RegionSupportBadge" CornerRadius="9" Padding="7,2" Background="#2422C55E">
+                                    <TextBlock x:Name="RegionSupportText" Text="检测中" FontSize="10.5" FontWeight="SemiBold" Foreground="#22C55E"/>
+                                </Border>
+                            </StackPanel>
+                        </DockPanel>
+
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="出口 IP"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock x:Name="ExitIpText" Text="-" FontSize="12" FontWeight="SemiBold" FontFamily="Consolas, Microsoft YaHei UI"
+                                           Foreground="#F3F5F8" Cursor="Hand" ToolTip="点击复制 Claude 出口 IP" MouseLeftButtonUp="ExitIpText_Click"/>
+                                <Border x:Name="LatencyBadge" Visibility="Collapsed" CornerRadius="8" Padding="6,1" Background="#20FFFFFF" Margin="6,0,0,0">
+                                    <TextBlock x:Name="LatencyText" Text="0ms" FontSize="10" FontFamily="Consolas" Foreground="#A0A6B4"/>
+                                </Border>
+                            </StackPanel>
+                        </DockPanel>
+                        <Border Style="{StaticResource RowDivider}"/>
+
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="地区 / 时区"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock x:Name="LocationText" Text="-" FontSize="11.5" Foreground="#E6E9EF" VerticalAlignment="Center"/>
+                                <Border x:Name="TzBadge" Visibility="Collapsed" CornerRadius="8" Padding="6,1.5" Background="#2422C55E" Margin="6,0,0,0">
+                                    <TextBlock x:Name="TzText" Text="时区一致" FontSize="10" FontWeight="SemiBold" Foreground="#22C55E"/>
+                                </Border>
+                            </StackPanel>
+                        </DockPanel>
+                        <Border Style="{StaticResource RowDivider}"/>
+
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="IP 属性"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Border x:Name="IpTypeBadge" CornerRadius="8" Padding="7,1.5" Background="#2422C55E" Margin="0,0,5,0">
+                                    <TextBlock x:Name="IpTypeText" Text="-" FontSize="10.5" FontWeight="SemiBold" Foreground="#22C55E"/>
+                                </Border>
+                                <Border x:Name="FlagsBadge" CornerRadius="8" Padding="7,1.5" Background="#2422C55E">
+                                    <TextBlock x:Name="FlagsText" Text="无匿名标记" FontSize="10.5" FontWeight="SemiBold" Foreground="#22C55E"/>
+                                </Border>
+                            </StackPanel>
+                        </DockPanel>
+                        <Border Style="{StaticResource RowDivider}"/>
+
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="ASN / 运营商"/>
+                            <TextBlock x:Name="IspText" DockPanel.Dock="Right" Text="-" FontSize="11" Foreground="#A0A6B4"
+                                       HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" MaxWidth="270"/>
+                        </DockPanel>
+                        <Border Style="{StaticResource RowDivider}"/>
+
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="IP 稳定性"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Ellipse x:Name="StabilityDot" Width="6" Height="6" Fill="#22C55E" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StabilityText" Text="稳定 · 无异常跳变" FontSize="11" Foreground="#A0A6B4"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- 5. Proxy Node & Direct Exit Card -->
+                <Border Style="{StaticResource CardBorder}" Margin="0,9,0,0">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,7">
+                            <TextBlock Text="⇄ 代理节点与直连对比" FontSize="11.5" FontWeight="SemiBold" Foreground="#A0A6B4" VerticalAlignment="Center"/>
+                            <Border x:Name="ClashModeBadge" DockPanel.Dock="Right" HorizontalAlignment="Right"
+                                    CornerRadius="9" Padding="7,2" Background="#243B82F6">
+                                <TextBlock x:Name="ClashModeText" Text="通用模式" FontSize="10.5" FontWeight="SemiBold" Foreground="#60A5FA"/>
+                            </Border>
+                        </DockPanel>
+
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="当前节点"/>
+                            <TextBlock x:Name="ClashNodeText" DockPanel.Dock="Right" Text="-" FontSize="11.5" FontWeight="Medium"
+                                       Foreground="#E6E9EF" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" MaxWidth="270"/>
+                        </DockPanel>
+                        <Border Style="{StaticResource RowDivider}"/>
+
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="国内直连"/>
+                            <TextBlock x:Name="DirectText" DockPanel.Dock="Right" Text="-" FontSize="11" Foreground="#A0A6B4"
+                                       HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" MaxWidth="270"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- 6. Last Refresh Bar -->
+                <Border CornerRadius="9" Padding="10,7" Margin="0,9,0,0"
+                        Background="#1A1D24" BorderBrush="#16FFFFFF" BorderThickness="1">
+                    <DockPanel>
+                        <TextBlock Text="⏱ 上次刷新" FontSize="11.5" Foreground="#9BA1AE" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LastRefreshText" DockPanel.Dock="Right" Text="检测中..." FontSize="11.5" FontWeight="Medium"
+                                   FontFamily="Consolas, Microsoft YaHei UI" Foreground="#E6E9EF" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </DockPanel>
+                </Border>
+
+                <!-- 7. Footer Bar -->
+                <DockPanel Margin="2,9,2,0">
+                    <TextBlock Text="🔗 127.0.0.1:17899/api/status" FontSize="10.5" FontFamily="Consolas"
+                               Foreground="#60A5FA" VerticalAlignment="Center" Cursor="Hand"
+                               ToolTip="点击复制本地 JSON API 地址" MouseLeftButtonUp="ApiLink_Click"/>
+                    <Button x:Name="SettingsBtn" DockPanel.Dock="Right" HorizontalAlignment="Right"
+                            Style="{StaticResource IconBtn}" Content="⚙" FontSize="13"
+                            ToolTip="设置与更多选项" Click="SettingsBtn_Click"/>
+                </DockPanel>
+
+            </StackPanel>
+
+            <!-- Toast Overlay -->
+            <Border x:Name="ToastBorder" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                    Margin="0,0,0,18" CornerRadius="14" Padding="12,5" Background="#DD000000" BorderBrush="#30FFFFFF" BorderThickness="1">
+                <TextBlock x:Name="ToastText" Text="" FontSize="11" Foreground="White" FontWeight="Medium"/>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

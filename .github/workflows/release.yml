@@ -1,4 +1,4 @@
-name: Build & Release macOS DMG
+name: Build & Release (macOS + Windows)
 
 on:
   push:
@@ -16,14 +16,52 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Universal DMG
+      - name: Build macOS Universal DMG
         run: |
           chmod +x build.sh package-dmg.sh
           ./package-dmg.sh
 
-      - name: Upload Release Asset
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Windows Single-File EXE (.NET 4.8)
+        shell: pwsh
+        run: ./windows/build-win.ps1
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/*.exe
+
+  release:
+    needs: [build-macos, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: release-assets
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: release-assets
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.dmg
+          files: release-assets/*
           generate_release_notes: true
