@@ -173,25 +173,26 @@ namespace ClaudeIPGuard
 
         private void SetTrayIconBitmap(Color statusColor)
         {
-            using (var bmp = new Bitmap(32, 32))
+            using (var bmp = new Bitmap(64, 64))
             using (var g = Graphics.FromImage(bmp))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
                 g.Clear(Color.Transparent);
 
                 // Outer dark ring
-                using (var bgBrush = new SolidBrush(Color.FromArgb(235, 22, 26, 33)))
+                using (var bgBrush = new SolidBrush(Color.FromArgb(240, 22, 26, 33)))
                 {
-                    g.FillEllipse(bgBrush, 2, 2, 28, 28);
+                    g.FillEllipse(bgBrush, 4, 4, 56, 56);
                 }
-                using (var borderPen = new Pen(Color.FromArgb(140, statusColor), 2.5f))
+                using (var borderPen = new Pen(Color.FromArgb(150, statusColor), 5f))
                 {
-                    g.DrawEllipse(borderPen, 3, 3, 26, 26);
+                    g.DrawEllipse(borderPen, 6, 6, 52, 52);
                 }
                 // Inner status dot
                 using (var dotBrush = new SolidBrush(statusColor))
                 {
-                    g.FillEllipse(dotBrush, 8, 8, 16, 16);
+                    g.FillEllipse(dotBrush, 16, 16, 32, 32);
                 }
 
                 IntPtr newHandle = bmp.GetHicon();

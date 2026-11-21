@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RootDir = Split-Path -Parent $ScriptDir
-$Version = "2.3.0"
+$Version = "2.3.1"
 $DistDir = Join-Path $RootDir "dist"
 $OutExe = Join-Path $DistDir "ClaudeIPGuard-v$Version-Windows-x64.exe"
 

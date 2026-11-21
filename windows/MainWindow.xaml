@@ -10,6 +10,11 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         Topmost="True"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        RenderOptions.ClearTypeHint="Enabled"
         FontFamily="Microsoft YaHei UI, Segoe UI, sans-serif">
 
     <Window.Resources>
@@ -62,17 +67,23 @@
         </Style>
     </Window.Resources>
 
-    <Border Margin="10"
-            Background="#F715171C"
-            BorderBrush="#2CFFFFFF"
-            BorderThickness="1"
-            CornerRadius="14"
-            MouseLeftButtonDown="RootBorder_MouseLeftButtonDown">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.45" Color="#000000"/>
-        </Border.Effect>
+    <Grid Margin="10">
+        <!-- Shadow-only sibling layer so DropShadowEffect never rasterizes foreground text -->
+        <Border Background="#F715171C"
+                CornerRadius="14"
+                IsHitTestVisible="False">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.45" Color="#000000"/>
+            </Border.Effect>
+        </Border>
 
-        <Grid>
+        <Border Background="#F715171C"
+                BorderBrush="#2CFFFFFF"
+                BorderThickness="1"
+                CornerRadius="14"
+                MouseLeftButtonDown="RootBorder_MouseLeftButtonDown">
+
+            <Grid>
             <StackPanel Margin="14">
 
                 <!-- 1. Top Status Banner -->
@@ -325,6 +336,7 @@
                     Margin="0,0,0,18" CornerRadius="14" Padding="12,5" Background="#DD000000" BorderBrush="#30FFFFFF" BorderThickness="1">
                 <TextBlock x:Name="ToastText" Text="" FontSize="11" Foreground="White" FontWeight="Medium"/>
             </Border>
-        </Grid>
-    </Border>
+            </Grid>
+        </Border>
+    </Grid>
 </Window>
