@@ -179,7 +179,7 @@ final class ClashSocketClient: @unchecked Sendable {
             state.nodeChain = "DIRECT"
             return state
         } else {
-            let preferred = ["Claude", "AI", "OpenAI", "ChatGPT", "Proxies", "Proxy", "节点选择", "PROXY", "MESL", "✈️Final", "Final", "🐟 漏网之鱼"]
+            let preferred = ["Claude", "AI", "OpenAI", "ChatGPT", "Proxies", "Proxy", "节点选择", "PROXY", "✈️Final", "Final", "🐟 漏网之鱼"]
             startGroup = preferred.first(where: { proxies[$0] != nil })
                 ?? proxies.first(where: { k, v in
                     k != "GLOBAL" && ((v["type"] as? String) == "Selector")
