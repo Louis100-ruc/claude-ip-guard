@@ -1,8 +1,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
-using System.Web.Script.Serialization;
 
 namespace ClaudeIPGuard
 {
@@ -13,8 +13,9 @@ namespace ClaudeIPGuard
             if (string.IsNullOrWhiteSpace(json)) return null;
             try
             {
-                var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
-                return serializer.Deserialize<Dictionary<string, object>>(json);
+                int pos = 0;
+                var val = ParseValue(json, ref pos);
+                return val as Dictionary<string, object>;
             }
             catch
             {
@@ -25,19 +26,19 @@ namespace ClaudeIPGuard
         public static string GetString(Dictionary<string, object> dict, string key, string fallback = "")
         {
             if (dict == null || !dict.ContainsKey(key) || dict[key] == null) return fallback;
-            return Convert.ToString(dict[key]) ?? fallback;
+            return Convert.ToString(dict[key], CultureInfo.InvariantCulture) ?? fallback;
         }
 
         public static bool GetBool(Dictionary<string, object> dict, string key, bool fallback = false)
         {
             if (dict == null || !dict.ContainsKey(key) || dict[key] == null) return fallback;
-            try { return Convert.ToBoolean(dict[key]); } catch { return fallback; }
+            try { return Convert.ToBoolean(dict[key], CultureInfo.InvariantCulture); } catch { return fallback; }
         }
 
         public static int? GetNullableInt(Dictionary<string, object> dict, string key)
         {
             if (dict == null || !dict.ContainsKey(key) || dict[key] == null) return null;
-            try { return Convert.ToInt32(dict[key]); } catch { return null; }
+            try { return Convert.ToInt32(dict[key], CultureInfo.InvariantCulture); } catch { return null; }
         }
 
         public static Dictionary<string, object> GetDict(Dictionary<string, object> dict, string key)
@@ -162,66 +163,245 @@ namespace ClaudeIPGuard
             };
         }
 
+        // MARK: - Self-contained JSON Serializer
         public static string SerializePretty(object obj)
         {
-            var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
-            var compact = serializer.Serialize(obj);
-            return FormatJson(compact);
+            var sb = new StringBuilder();
+            WriteValue(sb, obj, 0);
+            sb.Append("\r\n");
+            return sb.ToString();
         }
 
-        private static string FormatJson(string json)
+        private static void WriteValue(StringBuilder sb, object value, int indent)
         {
-            var sb = new StringBuilder(json.Length * 2);
-            bool inQuotes = false;
-            bool escaped = false;
-            int indent = 0;
-
-            for (int i = 0; i < json.Length; i++)
+            if (value == null)
             {
-                char ch = json[i];
-                if (inQuotes)
+                sb.Append("null");
+                return;
+            }
+            if (value is string s)
+            {
+                WriteString(sb, s);
+                return;
+            }
+            if (value is bool b)
+            {
+                sb.Append(b ? "true" : "false");
+                return;
+            }
+            if (value is int || value is long || value is short || value is byte)
+            {
+                sb.Append(Convert.ToString(value, CultureInfo.InvariantCulture));
+                return;
+            }
+            if (value is double d)
+            {
+                if (double.IsNaN(d) || double.IsInfinity(d)) sb.Append("null");
+                else sb.Append(d.ToString("G", CultureInfo.InvariantCulture));
+                return;
+            }
+            if (value is float f)
+            {
+                if (float.IsNaN(f) || float.IsInfinity(f)) sb.Append("null");
+                else sb.Append(f.ToString("G", CultureInfo.InvariantCulture));
+                return;
+            }
+            if (value is IDictionary dict)
+            {
+                sb.Append("{");
+                bool first = true;
+                foreach (DictionaryEntry entry in dict)
                 {
-                    sb.Append(ch);
-                    if (escaped) escaped = false;
-                    else if (ch == '\\') escaped = true;
-                    else if (ch == '"') inQuotes = false;
-                    continue;
+                    if (!first) sb.Append(",");
+                    sb.Append("\r\n");
+                    sb.Append(' ', (indent + 1) * 2);
+                    WriteString(sb, Convert.ToString(entry.Key, CultureInfo.InvariantCulture) ?? "");
+                    sb.Append(": ");
+                    WriteValue(sb, entry.Value, indent + 1);
+                    first = false;
                 }
+                if (!first)
+                {
+                    sb.Append("\r\n");
+                    sb.Append(' ', indent * 2);
+                }
+                sb.Append("}");
+                return;
+            }
+            if (value is IEnumerable list)
+            {
+                sb.Append("[");
+                bool first = true;
+                foreach (var item in list)
+                {
+                    if (!first) sb.Append(",");
+                    sb.Append("\r\n");
+                    sb.Append(' ', (indent + 1) * 2);
+                    WriteValue(sb, item, indent + 1);
+                    first = false;
+                }
+                if (!first)
+                {
+                    sb.Append("\r\n");
+                    sb.Append(' ', indent * 2);
+                }
+                sb.Append("]");
+                return;
+            }
+            WriteString(sb, Convert.ToString(value, CultureInfo.InvariantCulture) ?? "");
+        }
 
+        private static void WriteString(StringBuilder sb, string s)
+        {
+            sb.Append('"');
+            foreach (char ch in s)
+            {
                 switch (ch)
                 {
-                    case '"':
-                        inQuotes = true;
-                        sb.Append(ch);
-                        break;
-                    case '{':
-                    case '[':
-                        sb.Append(ch);
-                        sb.Append("\r\n");
-                        indent++;
-                        sb.Append(new string(' ', indent * 2));
-                        break;
-                    case '}':
-                    case ']':
-                        sb.Append("\r\n");
-                        indent = Math.Max(0, indent - 1);
-                        sb.Append(new string(' ', indent * 2));
-                        sb.Append(ch);
-                        break;
-                    case ',':
-                        sb.Append(ch);
-                        sb.Append("\r\n");
-                        sb.Append(new string(' ', indent * 2));
-                        break;
-                    case ':':
-                        sb.Append(": ");
-                        break;
+                    case '"': sb.Append("\\\""); break;
+                    case '\\': sb.Append("\\\\"); break;
+                    case '\b': sb.Append("\\b"); break;
+                    case '\f': sb.Append("\\f"); break;
+                    case '\n': sb.Append("\\n"); break;
+                    case '\r': sb.Append("\\r"); break;
+                    case '\t': sb.Append("\\t"); break;
                     default:
-                        if (!char.IsWhiteSpace(ch)) sb.Append(ch);
+                        if (ch < 32) sb.AppendFormat("\\u{0:x4}", (int)ch);
+                        else sb.Append(ch);
                         break;
                 }
             }
+            sb.Append('"');
+        }
+
+        // MARK: - Self-contained JSON Parser
+        private static void SkipWS(string s, ref int pos)
+        {
+            while (pos < s.Length && char.IsWhiteSpace(s[pos])) pos++;
+        }
+
+        private static object ParseValue(string s, ref int pos)
+        {
+            SkipWS(s, ref pos);
+            if (pos >= s.Length) return null;
+            char ch = s[pos];
+            if (ch == '{') return ParseDict(s, ref pos);
+            if (ch == '[') return ParseArray(s, ref pos);
+            if (ch == '"') return ParseString(s, ref pos);
+            if (ch == 't' && pos + 4 <= s.Length && s.Substring(pos, 4) == "true") { pos += 4; return true; }
+            if (ch == 'f' && pos + 5 <= s.Length && s.Substring(pos, 5) == "false") { pos += 5; return false; }
+            if (ch == 'n' && pos + 4 <= s.Length && s.Substring(pos, 4) == "null") { pos += 4; return null; }
+            return ParseNumber(s, ref pos);
+        }
+
+        private static Dictionary<string, object> ParseDict(string s, ref int pos)
+        {
+            var dict = new Dictionary<string, object>(StringComparer.Ordinal);
+            pos++; // '{'
+            SkipWS(s, ref pos);
+            if (pos < s.Length && s[pos] == '}') { pos++; return dict; }
+
+            while (pos < s.Length)
+            {
+                SkipWS(s, ref pos);
+                if (pos >= s.Length || s[pos] != '"') break;
+                var key = ParseString(s, ref pos);
+                SkipWS(s, ref pos);
+                if (pos < s.Length && s[pos] == ':') pos++;
+                var val = ParseValue(s, ref pos);
+                dict[key] = val;
+                SkipWS(s, ref pos);
+                if (pos < s.Length && s[pos] == ',') { pos++; continue; }
+                if (pos < s.Length && s[pos] == '}') { pos++; break; }
+                break;
+            }
+            return dict;
+        }
+
+        private static List<object> ParseArray(string s, ref int pos)
+        {
+            var list = new List<object>();
+            pos++; // '['
+            SkipWS(s, ref pos);
+            if (pos < s.Length && s[pos] == ']') { pos++; return list; }
+
+            while (pos < s.Length)
+            {
+                var val = ParseValue(s, ref pos);
+                list.Add(val);
+                SkipWS(s, ref pos);
+                if (pos < s.Length && s[pos] == ',') { pos++; continue; }
+                if (pos < s.Length && s[pos] == ']') { pos++; break; }
+                break;
+            }
+            return list;
+        }
+
+        private static string ParseString(string s, ref int pos)
+        {
+            var sb = new StringBuilder();
+            pos++; // opening '"'
+            while (pos < s.Length)
+            {
+                char ch = s[pos++];
+                if (ch == '"') break;
+                if (ch == '\\' && pos < s.Length)
+                {
+                    char esc = s[pos++];
+                    switch (esc)
+                    {
+                        case '"': sb.Append('"'); break;
+                        case '\\': sb.Append('\\'); break;
+                        case '/': sb.Append('/'); break;
+                        case 'b': sb.Append('\b'); break;
+                        case 'f': sb.Append('\f'); break;
+                        case 'n': sb.Append('\n'); break;
+                        case 'r': sb.Append('\r'); break;
+                        case 't': sb.Append('\t'); break;
+                        case 'u':
+                            if (pos + 4 <= s.Length)
+                            {
+                                var hex = s.Substring(pos, 4);
+                                int code;
+                                if (int.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out code))
+                                    sb.Append((char)code);
+                                pos += 4;
+                            }
+                            break;
+                        default:
+                            sb.Append(esc);
+                            break;
+                    }
+                }
+                else
+                {
+                    sb.Append(ch);
+                }
+            }
             return sb.ToString();
+        }
+
+        private static object ParseNumber(string s, ref int pos)
+        {
+            int start = pos;
+            if (pos < s.Length && s[pos] == '-') pos++;
+            while (pos < s.Length && (char.IsDigit(s[pos]) || s[pos] == '.' || s[pos] == 'e' || s[pos] == 'E' || s[pos] == '+' || s[pos] == '-'))
+            {
+                if ((s[pos] == '+' || s[pos] == '-') && pos > start && s[pos - 1] != 'e' && s[pos - 1] != 'E') break;
+                pos++;
+            }
+            var token = s.Substring(start, pos - start);
+            long lVal;
+            if (!token.Contains(".") && !token.Contains("e") && !token.Contains("E")
+                && long.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out lVal))
+            {
+                if (lVal >= int.MinValue && lVal <= int.MaxValue) return (int)lVal;
+                return lVal;
+            }
+            double dVal;
+            if (double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out dVal))
+                return dVal;
+            return 0;
         }
     }
 }
