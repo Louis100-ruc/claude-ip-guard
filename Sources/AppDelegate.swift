@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
 
         store.onSnapshotUpdated = { [weak self] _, _ in
             self?.updateStatusItemAppearance()
+            self?.syncCardContainerSizes()
         }
         store.onToggleFloating = { [weak self] in
             self?.toggleFloatingWindow()
@@ -85,22 +86,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         self.statusItem = item
     }
 
-    private let cardSize = NSSize(width: StatusCardView.cardWidth, height: StatusCardView.cardHeight)
+    private func currentCardSize() -> NSSize {
+        NSSize(
+            width: StatusCardView.cardWidth,
+            height: StatusCardView.requiredHeight(for: store.snapshot.overallLevel)
+        )
+    }
 
     private func setupPopover() {
         self.popover = makePopover()
     }
 
     private func makePopover() -> NSPopover {
+        let size = currentCardSize()
         let popover = NSPopover()
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
-        popover.contentSize = cardSize
+        popover.contentSize = size
 
         let vc = FixedCardViewController(
             rootView: StatusCardView(store: store, isFloatingWindow: false),
-            size: cardSize
+            size: size
         )
         popover.contentViewController = vc
         return popover
@@ -236,10 +243,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         showFloatingWindow()
     }
 
+    private func syncCardContainerSizes() {
+        let size = currentCardSize()
+        if let popover = popover, popover.isShown, popover.contentSize != size {
+            popover.contentSize = size
+            popover.contentViewController?.preferredContentSize = size
+        }
+        if let panel = floatingPanel, panel.isVisible {
+            let currentContent = panel.contentRect(forFrameRect: panel.frame).size
+            if abs(currentContent.height - size.height) > 1 {
+                let oldFrame = panel.frame
+                let deltaH = size.height - currentContent.height
+                let newFrame = NSRect(
+                    x: oldFrame.origin.x,
+                    y: oldFrame.origin.y - deltaH,
+                    width: oldFrame.size.width,
+                    height: oldFrame.size.height + deltaH
+                )
+                panel.setFrame(newFrame, display: true, animate: true)
+            }
+        }
+    }
+
     private func showFloatingWindow() {
+        let size = currentCardSize()
         if floatingPanel == nil {
             let panel = NSPanel(
-                contentRect: NSRect(origin: .zero, size: cardSize),
+                contentRect: NSRect(origin: .zero, size: size),
                 styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -257,13 +287,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
 
             let vc = FixedCardViewController(
                 rootView: StatusCardView(store: store, isFloatingWindow: true),
-                size: cardSize
+                size: size
             )
             vc.view.wantsLayer = true
             vc.view.layer?.cornerRadius = 14
             vc.view.layer?.masksToBounds = true
             panel.contentViewController = vc
-            panel.setContentSize(cardSize)
+            panel.setContentSize(size)
 
             let restored = panel.setFrameAutosaveName("ClaudeIPGuardFloatingPanel")
             if !restored, let screen = NSScreen.main {

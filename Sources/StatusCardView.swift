@@ -3,16 +3,27 @@ import AppKit
 
 struct StatusCardView: View {
     static let cardWidth: CGFloat = 424
-    static let cardHeight: CGFloat = 608
+    static let baseCardHeight: CGFloat = 608
+    static let alertCardHeight: CGFloat = 666
+
+    static func requiredHeight(for level: OverallLevel) -> CGFloat {
+        (level == .warning || level == .danger) ? alertCardHeight : baseCardHeight
+    }
 
     @ObservedObject var store: MonitorStore
     var isFloatingWindow: Bool = false
 
     private var snap: DetectionSnapshot { store.snapshot }
+    private var showAIFixBar: Bool {
+        snap.overallLevel == .warning || snap.overallLevel == .danger
+    }
 
     var body: some View {
         VStack(spacing: 10) {
             headerBanner
+            if showAIFixBar {
+                aiFixPromptBar
+            }
             leakMatrixCard
             claudePurityCard
             routingCard
@@ -101,6 +112,65 @@ struct StatusCardView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .stroke(levelColor(snap.overallLevel).opacity(0.25), lineWidth: 1)
+                )
+        )
+    }
+
+    // MARK: - AI Fix Prompt Action Bar (Shown on Yellow / Red Alert)
+    private var aiFixPromptBar: some View {
+        let accent: Color = snap.overallLevel == .danger ? .red : .orange
+        let count = max(1, snap.riskAlerts.count)
+        let titleText = snap.overallLevel == .danger
+            ? "高危警报 · 发现 \(count) 项异常"
+            : "风险预警 · 发现 \(count) 项待优化"
+
+        return HStack(spacing: 10) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(accent)
+
+            VStack(alignment: .leading, spacing: 1.5) {
+                Text(titleText)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundColor(accent)
+                    .lineLimit(1)
+                Text("已生成专属修复指令，粘贴给 AI 自动排查节点/配置")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+
+            Button(action: {
+                let prompt = FixPromptGenerator.generate(from: snap)
+                store.copyToClipboard(prompt, label: "AI 修复 Prompt")
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 10.5, weight: .semibold))
+                    Text("复制 Prompt")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5.5)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(accent)
+                )
+            }
+            .buttonStyle(.plain)
+            .help("复制针对当前异常生成的 AI 修复 Prompt，直接发给 AI 助手即可")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(accent.opacity(0.10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(accent.opacity(0.32), lineWidth: 1)
                 )
         )
     }
@@ -387,6 +457,10 @@ struct StatusCardView: View {
                     if let url = URL(string: "https://ip.net.coffee/claude/") {
                         NSWorkspace.shared.open(url)
                     }
+                }
+                Button("复制 AI 诊断修复 Prompt") {
+                    let prompt = FixPromptGenerator.generate(from: snap)
+                    store.copyToClipboard(prompt, label: "AI 修复 Prompt")
                 }
                 Button("复制完整 JSON 报告") {
                     let encoder = JSONEncoder()

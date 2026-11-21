@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="ClaudeIPGuard"
-VERSION="2.1.1"
+VERSION="2.2.0"
 BUILD_DIR="$PROJECT_DIR/build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 INSTALL_DIR="$HOME/Applications"
@@ -59,7 +59,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << EOF
     <key>CFBundleShortVersionString</key>
     <string>${VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>21</string>
+    <string>22</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>
@@ -77,6 +77,7 @@ SOURCES=(
   "$PROJECT_DIR/Sources/Models.swift"
   "$PROJECT_DIR/Sources/ClashSocketClient.swift"
   "$PROJECT_DIR/Sources/IPChecker.swift"
+  "$PROJECT_DIR/Sources/FixPromptGenerator.swift"
   "$PROJECT_DIR/Sources/LocalHTTPServer.swift"
   "$PROJECT_DIR/Sources/MonitorStore.swift"
   "$PROJECT_DIR/Sources/StatusCardView.swift"

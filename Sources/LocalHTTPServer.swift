@@ -72,12 +72,28 @@ final class LocalHTTPServer {
                     self.sendJSON(conn: conn, snapshot: updated)
                 }
 
+            case "/fix-prompt", "/api/fix-prompt":
+                let snap = self.getSnapshot()
+                let prompt = FixPromptGenerator.generate(from: snap)
+                if rawPath.contains("format=json") {
+                    let obj: [String: Any] = [
+                        "overallLevel": snap.overallLevel.rawValue,
+                        "overallSummary": snap.overallSummary,
+                        "prompt": prompt
+                    ]
+                    let data = (try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]))
+                        ?? Data("{}".utf8)
+                    self.sendResponse(conn: conn, status: "200 OK", contentType: "application/json; charset=utf-8", body: data)
+                } else {
+                    self.sendResponse(conn: conn, status: "200 OK", contentType: "text/plain; charset=utf-8", body: Data(prompt.utf8))
+                }
+
             case "/health":
                 let payload = Data("{\"ok\":true,\"service\":\"ClaudeIPGuard\"}\n".utf8)
                 self.sendResponse(conn: conn, status: "200 OK", body: payload)
 
             default:
-                let payload = Data("{\"error\":\"Not Found\",\"endpoints\":[\"/api/status\",\"/api/refresh\",\"/health\"]}\n".utf8)
+                let payload = Data("{\"error\":\"Not Found\",\"endpoints\":[\"/api/status\",\"/api/refresh\",\"/api/fix-prompt\",\"/health\"]}\n".utf8)
                 self.sendResponse(conn: conn, status: "404 Not Found", body: payload)
             }
         }
@@ -91,10 +107,10 @@ final class LocalHTTPServer {
         sendResponse(conn: conn, status: "200 OK", body: data)
     }
 
-    private func sendResponse(conn: NWConnection, status: String, body: Data) {
+    private func sendResponse(conn: NWConnection, status: String, contentType: String = "application/json; charset=utf-8", body: Data) {
         let header = """
         HTTP/1.1 \(status)\r
-        Content-Type: application/json; charset=utf-8\r
+        Content-Type: \(contentType)\r
         Content-Length: \(body.count)\r
         Access-Control-Allow-Origin: *\r
         Access-Control-Allow-Methods: GET, POST, OPTIONS\r

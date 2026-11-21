@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="ClaudeIPGuard"
-VERSION="2.1.1"
+VERSION="2.2.0"
 BUILD_DIR="$PROJECT_DIR/build"
 DIST_DIR="$PROJECT_DIR/dist"
 STAGING_DIR="$BUILD_DIR/dmg-staging"
