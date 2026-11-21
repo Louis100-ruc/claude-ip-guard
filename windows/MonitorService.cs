@@ -72,11 +72,11 @@ namespace ClaudeIPGuard
                 _lastClashSig = _clashClient.FetchState().Signature;
             });
 
-            _clashTimer = new Timer(_ => PollClash(), null, 2500, 2000);
+            _clashTimer = new Timer(state => PollClash(), null, 2500, 2000);
             NetworkChange.NetworkAddressChanged += OnNetworkChanged;
             ReschedulePeriodicTimer();
 
-            var _ = TriggerCheckAsync("启动检测");
+            var initTask = TriggerCheckAsync("启动检测");
         }
 
         public void Stop()
