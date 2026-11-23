@@ -93,8 +93,9 @@ namespace ClaudeIPGuard
             if (snap.Stability.Status == CheckState.Danger || snap.Stability.Status == CheckState.Warning)
             {
                 var icon = snap.Stability.Status == CheckState.Danger ? "🔴" : "🟡";
-                issues.Add(string.Format("{0} **出口 IP 不稳定 / 自动漂移**：{1}。", icon, snap.Stability.Label));
-                steps.Add("- **改为固定单节点**：检查 Clash Verge 当前是否选用了自动测速（url-test）或负载均衡（load-balance）分组，切换为固定单个稳定住宅节点。");
+                var distNote = snap.Stability.LastDriftDistanceKm.HasValue ? ("，漂移距离约 " + snap.Stability.LastDriftDistanceKm.Value + "km") : "";
+                issues.Add(string.Format("{0} **出口 IP 异常漂移 / 跨城跳变**：{1}{2}。", icon, snap.Stability.Label, distNote));
+                steps.Add("- **锁定单一城市的固定住宅节点**：当前节点发生了远距离跨城漂移（超过同城 80km 范围）或短时高频轮换；请检查 Clash Verge 是否选用了负载均衡/自动测速组或跨城动态池，帮我切换为**锁定单一城市（如 Tokyo）的固定住宅/家宽节点**。");
             }
 
             var clashInfo = snap.Clash.Running

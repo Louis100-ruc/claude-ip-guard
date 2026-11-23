@@ -41,6 +41,12 @@ namespace ClaudeIPGuard
             try { return Convert.ToInt32(dict[key], CultureInfo.InvariantCulture); } catch { return null; }
         }
 
+        public static double? GetNullableDouble(Dictionary<string, object> dict, string key)
+        {
+            if (dict == null || !dict.ContainsKey(key) || dict[key] == null) return null;
+            try { return Convert.ToDouble(dict[key], CultureInfo.InvariantCulture); } catch { return null; }
+        }
+
         public static Dictionary<string, object> GetDict(Dictionary<string, object> dict, string key)
         {
             if (dict == null || !dict.ContainsKey(key)) return null;
@@ -123,6 +129,9 @@ namespace ClaudeIPGuard
                     ["status"] = s.Stability.Status.ToString().ToLowerInvariant(),
                     ["sessionChangeCount"] = s.Stability.SessionChangeCount,
                     ["unexpectedDriftCount"] = s.Stability.UnexpectedDriftCount,
+                    ["recentDriftCount1h"] = s.Stability.RecentDriftCount1h,
+                    ["lastDriftDistanceKm"] = s.Stability.LastDriftDistanceKm,
+                    ["lastDriftRoute"] = s.Stability.LastDriftRoute,
                     ["lastChangedAt"] = s.Stability.LastChangedAt,
                     ["label"] = s.Stability.Label
                 },
@@ -154,6 +163,8 @@ namespace ClaudeIPGuard
                 ["org"] = d.Org,
                 ["asn"] = d.Asn,
                 ["timezone"] = d.Timezone,
+                ["latitude"] = d.Latitude,
+                ["longitude"] = d.Longitude,
                 ["ipType"] = d.IpType.ToString().ToLowerInvariant(),
                 ["isHosting"] = d.IsHosting,
                 ["isProxy"] = d.IsProxy,

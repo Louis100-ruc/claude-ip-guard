@@ -6,7 +6,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ClaudeIPGuard</AssemblyName>
     <RootNamespace>ClaudeIPGuard</RootNamespace>
-    <Version>2.3.1</Version>
+    <Version>2.3.2</Version>
     <AssemblyTitle>ClaudeIPGuard</AssemblyTitle>
     <Product>ClaudeIPGuard</Product>
     <Description>Windows system tray monitor for Claude AI IP purity, DNS/IPv6/STUN leak checks, route consistency and local HTTP API</Description>

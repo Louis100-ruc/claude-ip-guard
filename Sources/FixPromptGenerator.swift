@@ -111,9 +111,10 @@ enum FixPromptGenerator {
         // 8. IP Drift / Stability
         if snap.stability.status == .danger || snap.stability.status == .warning {
             let icon = snap.stability.status == .danger ? "🔴" : "🟡"
-            issues.append("\(icon) **出口 IP 不稳定 / 自动漂移**：\(snap.stability.label)。")
+            let distNote = snap.stability.lastDriftDistanceKm.map { "，漂移距离约 \($0)km" } ?? ""
+            issues.append("\(icon) **出口 IP 异常漂移 / 跨城跳变**：\(snap.stability.label)\(distNote)。")
             repairSteps.append("""
-            - **改为固定单节点**：检查 Clash Verge 当前是否选用了「自动测速（url-test）」或「负载均衡（load-balance）」策略组，或者该机场节点本身为动态轮换出口；请帮我切换为**固定单个稳定住宅节点**，避免使用 Claude 期间 IP 频繁跳变触发风控。
+            - **锁定单一城市的固定住宅节点**：当前节点发生了远距离跨城漂移（超过同城 80km 范围）或短时高频轮换；请检查 Clash Verge 是否选用了负载均衡/自动测速组或跨城动态池节点，帮我切换为**锁定单一城市（如 Tokyo）的固定住宅/家宽节点**，并避免使用 Claude 期间发生远距离城市跳变。
             """)
         }
 

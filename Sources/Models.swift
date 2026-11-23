@@ -141,6 +141,9 @@ struct IPStabilityInfo: Codable, Equatable {
     var status: CheckState = .safe
     var sessionChangeCount: Int = 0
     var unexpectedDriftCount: Int = 0
+    var recentDriftCount1h: Int = 0
+    var lastDriftDistanceKm: Int? = nil
+    var lastDriftRoute: String = ""
     var lastChangedAt: String = ""
     var label: String = "稳定 · 无异常跳变"
 }
@@ -155,6 +158,8 @@ struct IPDetail: Codable, Equatable {
     var org: String = ""
     var asn: String = ""
     var timezone: String = ""
+    var latitude: Double? = nil
+    var longitude: Double? = nil
     var ipType: IPTypeCategory = .unknown
     var isHosting: Bool = false
     var isProxy: Bool = false

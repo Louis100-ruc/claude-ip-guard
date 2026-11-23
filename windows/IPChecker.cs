@@ -348,7 +348,7 @@ namespace ClaudeIPGuard
 
         private async Task<Dictionary<string, object>> FetchIPApiAsync(HttpClient client, string ip)
         {
-            var url = "http://ip-api.com/json/" + ip + "?fields=status,country,countryCode,regionName,city,isp,org,as,asname,timezone,mobile,proxy,hosting,query";
+            var url = "http://ip-api.com/json/" + ip + "?fields=status,country,countryCode,regionName,city,lat,lon,isp,org,as,asname,timezone,mobile,proxy,hosting,query";
             var root = await FetchJsonDictAsync(client, url);
             if (root == null || JsonHelper.GetString(root, "status") != "success") return null;
             return root;
@@ -374,6 +374,8 @@ namespace ClaudeIPGuard
                 detail.Isp = JsonHelper.GetString(ia, "isp");
                 detail.Org = JsonHelper.GetString(ia, "org");
                 detail.Timezone = JsonHelper.GetString(ia, "timezone");
+                detail.Latitude = JsonHelper.GetNullableDouble(ia, "lat");
+                detail.Longitude = JsonHelper.GetNullableDouble(ia, "lon");
                 var asField = JsonHelper.GetString(ia, "as");
                 if (!string.IsNullOrEmpty(asField))
                     detail.Asn = asField.Split(' ')[0];
@@ -401,8 +403,14 @@ namespace ClaudeIPGuard
                 {
                     if (string.IsNullOrEmpty(detail.Country)) detail.Country = JsonHelper.GetString(locObj, "country");
                     if (string.IsNullOrEmpty(detail.CountryCode)) detail.CountryCode = JsonHelper.GetString(locObj, "country_code").ToUpperInvariant();
+                    if (string.IsNullOrEmpty(detail.Region)) detail.Region = JsonHelper.GetString(locObj, "state");
                     if (string.IsNullOrEmpty(detail.City)) detail.City = JsonHelper.GetString(locObj, "city");
                     if (string.IsNullOrEmpty(detail.Timezone)) detail.Timezone = JsonHelper.GetString(locObj, "timezone");
+                    if (!detail.Latitude.HasValue)
+                    {
+                        detail.Latitude = JsonHelper.GetNullableDouble(locObj, "latitude");
+                        detail.Longitude = JsonHelper.GetNullableDouble(locObj, "longitude");
+                    }
                     ipLocalTimeStr = JsonHelper.GetString(locObj, "localtime");
                 }
                 var rObj = JsonHelper.GetDict(iq, "risk");
@@ -424,8 +432,14 @@ namespace ClaudeIPGuard
                 if (string.IsNullOrEmpty(detail.Isp)) detail.Isp = JsonHelper.GetString(pc, "provider");
                 if (string.IsNullOrEmpty(detail.Country)) detail.Country = JsonHelper.GetString(pc, "country");
                 if (string.IsNullOrEmpty(detail.CountryCode)) detail.CountryCode = JsonHelper.GetString(pc, "isocode").ToUpperInvariant();
+                if (string.IsNullOrEmpty(detail.Region)) detail.Region = JsonHelper.GetString(pc, "region");
                 if (string.IsNullOrEmpty(detail.City)) detail.City = JsonHelper.GetString(pc, "city");
                 if (string.IsNullOrEmpty(detail.Timezone)) detail.Timezone = JsonHelper.GetString(pc, "timezone");
+                if (!detail.Latitude.HasValue)
+                {
+                    detail.Latitude = JsonHelper.GetNullableDouble(pc, "latitude");
+                    detail.Longitude = JsonHelper.GetNullableDouble(pc, "longitude");
+                }
                 var host = JsonHelper.GetString(pc, "hostname");
                 if (!string.IsNullOrEmpty(host)) risk.Rdns = host;
                 risk.ProxycheckScore = JsonHelper.GetNullableInt(pc, "risk");
@@ -474,6 +488,7 @@ namespace ClaudeIPGuard
             {
                 Ip = d.Ip, Country = d.Country, CountryCode = d.CountryCode, Region = d.Region,
                 City = d.City, Isp = d.Isp, Org = d.Org, Asn = d.Asn, Timezone = d.Timezone,
+                Latitude = d.Latitude, Longitude = d.Longitude,
                 IpType = d.IpType, IsHosting = d.IsHosting, IsProxy = d.IsProxy,
                 IsMobile = d.IsMobile, Colo = d.Colo, LatencyMs = d.LatencyMs
             };

@@ -140,6 +140,9 @@ namespace ClaudeIPGuard
         public CheckState Status = CheckState.Safe;
         public int SessionChangeCount = 0;
         public int UnexpectedDriftCount = 0;
+        public int RecentDriftCount1h = 0;
+        public int? LastDriftDistanceKm = null;
+        public string LastDriftRoute = "";
         public string LastChangedAt = "";
         public string Label = "稳定 · 无异常跳变";
     }
@@ -155,6 +158,8 @@ namespace ClaudeIPGuard
         public string Org = "";
         public string Asn = "";
         public string Timezone = "";
+        public double? Latitude = null;
+        public double? Longitude = null;
         public IPTypeCategory IpType = IPTypeCategory.Unknown;
         public bool IsHosting = false;
         public bool IsProxy = false;

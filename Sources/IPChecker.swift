@@ -360,7 +360,7 @@ final class IPChecker {
     }
 
     private func fetchFromIPApi(session: URLSession, ip: String) async -> [String: Any]? {
-        let urlString = "http://ip-api.com/json/\(ip)?fields=status,country,countryCode,regionName,city,isp,org,as,asname,timezone,mobile,proxy,hosting,query"
+        let urlString = "http://ip-api.com/json/\(ip)?fields=status,country,countryCode,regionName,city,lat,lon,isp,org,as,asname,timezone,mobile,proxy,hosting,query"
         guard let url = URL(string: urlString) else { return nil }
         do {
             let (data, _) = try await session.data(from: url)
@@ -392,6 +392,10 @@ final class IPChecker {
             detail.isp = (ia["isp"] as? String) ?? ""
             detail.org = (ia["org"] as? String) ?? ""
             detail.timezone = (ia["timezone"] as? String) ?? ""
+            if let lat = ia["lat"] as? Double, let lon = ia["lon"] as? Double {
+                detail.latitude = lat
+                detail.longitude = lon
+            }
             if let asField = ia["as"] as? String {
                 detail.asn = asField.split(separator: " ").first.map(String.init) ?? asField
             }
@@ -414,8 +418,13 @@ final class IPChecker {
             if let loc = iq["location"] as? [String: Any] {
                 if detail.country.isEmpty, let c = loc["country"] as? String { detail.country = c }
                 if detail.countryCode.isEmpty, let cc = loc["country_code"] as? String { detail.countryCode = cc.uppercased() }
+                if detail.region.isEmpty, let st = loc["state"] as? String { detail.region = st }
                 if detail.city.isEmpty, let city = loc["city"] as? String { detail.city = city }
                 if detail.timezone.isEmpty, let tz = loc["timezone"] as? String { detail.timezone = tz }
+                if detail.latitude == nil, let lat = loc["latitude"] as? Double, let lon = loc["longitude"] as? Double {
+                    detail.latitude = lat
+                    detail.longitude = lon
+                }
             }
             if let r = iq["risk"] as? [String: Any] {
                 let score = (r["risk_score"] as? Int) ?? 0
@@ -435,8 +444,13 @@ final class IPChecker {
             if detail.isp.isEmpty, let prov = pc["provider"] as? String { detail.isp = prov }
             if detail.country.isEmpty, let c = pc["country"] as? String { detail.country = c }
             if detail.countryCode.isEmpty, let cc = pc["isocode"] as? String { detail.countryCode = cc.uppercased() }
+            if detail.region.isEmpty, let reg = pc["region"] as? String { detail.region = reg }
             if detail.city.isEmpty, let city = pc["city"] as? String { detail.city = city }
             if detail.timezone.isEmpty, let tz = pc["timezone"] as? String { detail.timezone = tz }
+            if detail.latitude == nil, let lat = pc["latitude"] as? Double, let lon = pc["longitude"] as? Double {
+                detail.latitude = lat
+                detail.longitude = lon
+            }
             if let host = pc["hostname"] as? String, !host.isEmpty {
                 risk.rdns = host
             }

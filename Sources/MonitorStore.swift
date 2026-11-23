@@ -87,12 +87,20 @@ final class MonitorStore: ObservableObject {
     private var lastPathSummary: String = ""
     private var httpServer: LocalHTTPServer?
 
+    private struct DriftEvent {
+        let timestamp: Date
+        let severity: CheckState
+        let distanceKm: Int?
+        let route: String
+        let detail: String
+    }
+
     // IP Stability & Alert tracking
-    private var trackedExitIP: String = ""
-    private var trackedExitCountry: String = ""
+    private var trackedExit: IPDetail? = nil
     private var trackedNodeSig: String = ""
     private var sessionIPChangeCount: Int = 0
     private var unexpectedDriftCount: Int = 0
+    private var recentDrifts: [DriftEvent] = []
     private var lastIPChangedAt: String = ""
     private var lastAlertSummary: String = ""
     private var lastAlertTime: Date = .distantPast
@@ -209,76 +217,163 @@ final class MonitorStore: ObservableObject {
         }
     }
 
+    private static func haversineKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Int {
+        let r = 6371.0
+        let dLat = (lat2 - lat1) * .pi / 180.0
+        let dLon = (lon2 - lon1) * .pi / 180.0
+        let a = sin(dLat / 2) * sin(dLat / 2)
+            + cos(lat1 * .pi / 180.0) * cos(lat2 * .pi / 180.0) * sin(dLon / 2) * sin(dLon / 2)
+        let c = 2 * atan2(sqrt(a), sqrt(max(0, 1 - a)))
+        return Int((r * c).rounded())
+    }
+
     private func applyStabilityAndAlerts(to raw: DetectionSnapshot) -> DetectionSnapshot {
         var result = raw
-        let newIP = result.claudeExit.ip
-        let newCountry = result.claudeExit.countryCode
+        let now = result.updatedAt
+        let newExit = result.claudeExit
+        let newIP = newExit.ip
         let newNodeSig = result.clash.signature
 
-        var unexpectedCrossCountry = false
-        var unexpectedIPDrift = false
+        // Keep only drift events within the trailing 60-minute sliding window
+        recentDrifts = recentDrifts.filter { now.timeIntervalSince($0.timestamp) <= 3600 }
 
         if !newIP.isEmpty {
-            if !trackedExitIP.isEmpty && newIP != trackedExitIP {
+            if let prev = trackedExit, !prev.ip.isEmpty, newIP != prev.ip {
                 sessionIPChangeCount += 1
                 let f = DateFormatter()
                 f.dateFormat = "HH:mm:ss"
-                lastIPChangedAt = f.string(from: result.updatedAt)
+                lastIPChangedAt = f.string(from: now)
 
                 let nodeChanged = (newNodeSig != trackedNodeSig)
-                if !nodeChanged {
+                if nodeChanged {
+                    // User manually switched proxy node: reset automatic drift history for the new node
+                    recentDrifts.removeAll()
+                } else {
                     unexpectedDriftCount += 1
-                    unexpectedIPDrift = true
-                    if !trackedExitCountry.isEmpty && !newCountry.isEmpty && newCountry != trackedExitCountry {
-                        unexpectedCrossCountry = true
+                    let crossCountry = !prev.countryCode.isEmpty && !newExit.countryCode.isEmpty
+                        && prev.countryCode != newExit.countryCode
+                    let asnChanged = !prev.asn.isEmpty && !newExit.asn.isEmpty && prev.asn != newExit.asn
+                    let regionChanged = !prev.region.isEmpty && !newExit.region.isEmpty
+                        && prev.region.lowercased() != newExit.region.lowercased()
+
+                    var distKm: Int? = nil
+                    if let lat1 = prev.latitude, let lon1 = prev.longitude,
+                       let lat2 = newExit.latitude, let lon2 = newExit.longitude {
+                        distKm = Self.haversineKm(lat1: lat1, lon1: lon1, lat2: lat2, lon2: lon2)
                     }
+
+                    let fromLabel = regionChanged
+                        ? (prev.region.isEmpty ? prev.city : prev.region)
+                        : (!prev.city.isEmpty ? prev.city : (!prev.region.isEmpty ? prev.region : prev.countryCode))
+                    let toLabel = regionChanged
+                        ? (newExit.region.isEmpty ? newExit.city : newExit.region)
+                        : (!newExit.city.isEmpty ? newExit.city : (!newExit.region.isEmpty ? newExit.region : newExit.countryCode))
+                    let routeText = (!fromLabel.isEmpty && !toLabel.isEmpty) ? "\(fromLabel) → \(toLabel)" : ""
+
+                    let severity: CheckState
+                    let detail: String
+                    if crossCountry {
+                        severity = .danger
+                        detail = "跨国漂移：\(prev.countryCode) → \(newExit.countryCode)"
+                    } else if let km = distKm, km > 500 {
+                        severity = .danger
+                        detail = "超远跨城：\(routeText)（约 \(km)km）"
+                    } else if let km = distKm, km > 80 {
+                        severity = .warning
+                        detail = "跨城漂移：\(routeText)（约 \(km)km）"
+                    } else if distKm == nil && regionChanged {
+                        severity = .warning
+                        detail = "跨区漂移：\(routeText)"
+                    } else if asnChanged {
+                        severity = .warning
+                        detail = "跨运营商漂移（\(prev.asn) → \(newExit.asn)）"
+                    } else {
+                        severity = .safe
+                        let distPart = distKm.map { "约 \($0)km · " } ?? ""
+                        detail = "同城微漂移（\(distPart)正常家宽波动）"
+                    }
+
+                    recentDrifts.append(DriftEvent(
+                        timestamp: now,
+                        severity: severity,
+                        distanceKm: distKm,
+                        route: routeText,
+                        detail: detail
+                    ))
                 }
             }
-            trackedExitIP = newIP
-            trackedExitCountry = newCountry
+            trackedExit = newExit
             trackedNodeSig = newNodeSig
         }
 
         var stability = IPStabilityInfo()
         stability.sessionChangeCount = sessionIPChangeCount
         stability.unexpectedDriftCount = unexpectedDriftCount
+        stability.recentDriftCount1h = recentDrifts.count
         stability.lastChangedAt = lastIPChangedAt
 
-        if unexpectedCrossCountry {
+        let latestEvent = recentDrifts.last
+        let worstDanger = recentDrifts.last(where: { $0.severity == .danger })
+        let worstWarning = recentDrifts.last(where: { $0.severity == .warning })
+
+        if let best = worstDanger ?? worstWarning ?? latestEvent {
+            stability.lastDriftDistanceKm = best.distanceKm
+            stability.lastDriftRoute = best.route
+        }
+
+        if recentDrifts.isEmpty {
+            stability.status = .safe
+            stability.label = sessionIPChangeCount > 0
+                ? "稳定 · 手动切换 \(sessionIPChangeCount) 次"
+                : "稳定 · 无异常跳变"
+        } else if let dangerEvt = worstDanger {
             stability.status = .danger
-            stability.label = "未切节点发生跨国漂移（\(unexpectedDriftCount)次）"
-            result.riskAlerts.append("未切节点但出口 IP 跨国漂移至 \(newCountry)")
+            stability.label = dangerEvt.detail
+            result.riskAlerts.append(dangerEvt.detail)
             if result.overallLevel != .danger {
                 result.overallLevel = .danger
-                result.overallSummary = "出口 IP 异常跨国漂移（\(newCountry)）"
+                result.overallSummary = dangerEvt.detail
             }
-        } else if unexpectedDriftCount > 0 {
+        } else if recentDrifts.count >= 4 {
+            stability.status = .danger
+            stability.label = "高频漂移（\(recentDrifts.count)次/1h）"
+            result.riskAlerts.append("1 小时内出口 IP 自动漂移 \(recentDrifts.count) 次（疑似动态轮换池）")
+            if result.overallLevel != .danger {
+                result.overallLevel = .danger
+                result.overallSummary = "1 小时内高频漂移 \(recentDrifts.count) 次"
+            }
+        } else if let warnEvt = worstWarning {
             stability.status = .warning
-            stability.label = "自动漂移 \(unexpectedDriftCount) 次\(lastIPChangedAt.isEmpty ? "" : " · \(lastIPChangedAt)")"
-            if unexpectedIPDrift {
-                result.riskAlerts.append("当前节点出口 IP 自动更换（动态/负载均衡）")
-            }
+            stability.label = warnEvt.detail
+            result.riskAlerts.append(warnEvt.detail)
             if result.overallLevel == .safe {
                 result.overallLevel = .warning
-                result.overallSummary = "地区正常，但节点 IP 存在自动漂移"
+                result.overallSummary = warnEvt.detail
             }
-        } else if sessionIPChangeCount > 0 {
-            stability.status = .safe
-            stability.label = "稳定 · 手动切换 \(sessionIPChangeCount) 次"
+        } else if recentDrifts.count >= 2 {
+            stability.status = .warning
+            stability.label = "同城较频漂移（\(recentDrifts.count)次/1h）"
+            result.riskAlerts.append("1 小时内同城 IP 变动 \(recentDrifts.count) 次")
+            if result.overallLevel == .safe {
+                result.overallLevel = .warning
+                result.overallSummary = "1 小时内同城漂移 \(recentDrifts.count) 次"
+            }
         } else {
+            // Single intra-city, same-ASN drift within 1 hour: safe normal residential behavior
             stability.status = .safe
-            stability.label = "稳定 · 无异常跳变"
+            let kmStr = latestEvent?.distanceKm.map { "约 \($0)km · " } ?? ""
+            stability.label = "同城微漂移（\(kmStr)1次/1h · 正常）"
         }
 
         result.stability = stability
 
         // Trigger macOS notification on red-line danger with cooldown
         if alertsEnabled && result.overallLevel == .danger {
-            let now = Date()
-            let shouldNotify = (result.overallSummary != lastAlertSummary) || (now.timeIntervalSince(lastAlertTime) > 180)
+            let nowDate = Date()
+            let shouldNotify = (result.overallSummary != lastAlertSummary) || (nowDate.timeIntervalSince(lastAlertTime) > 180)
             if shouldNotify {
                 lastAlertSummary = result.overallSummary
-                lastAlertTime = now
+                lastAlertTime = nowDate
                 sendSystemAlert(title: "ClaudeIPGuard 高危预警", body: result.overallSummary)
             }
         } else if result.overallLevel == .safe {

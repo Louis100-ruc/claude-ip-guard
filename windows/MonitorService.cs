@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Threading;
@@ -25,12 +27,21 @@ namespace ClaudeIPGuard
         private CancellationTokenSource _debounceCts;
         private int _isCheckingFlag = 0;
 
+        private class DriftEvent
+        {
+            public DateTime Timestamp;
+            public CheckState Severity;
+            public int? DistanceKm;
+            public string Route;
+            public string Detail;
+        }
+
         private string _lastClashSig = "";
-        private string _trackedExitIP = "";
-        private string _trackedExitCountry = "";
+        private IPDetail _trackedExit = null;
         private string _trackedNodeSig = "";
         private int _sessionIPChangeCount = 0;
         private int _unexpectedDriftCount = 0;
+        private readonly List<DriftEvent> _recentDrifts = new List<DriftEvent>();
         private string _lastIPChangedAt = "";
         private string _lastAlertSummary = "";
         private DateTime _lastAlertTime = DateTime.MinValue;
@@ -227,34 +238,111 @@ namespace ClaudeIPGuard
             }, null, ms, ms);
         }
 
+        private static int HaversineKm(double lat1, double lon1, double lat2, double lon2)
+        {
+            const double r = 6371.0;
+            double dLat = (lat2 - lat1) * Math.PI / 180.0;
+            double dLon = (lon2 - lon1) * Math.PI / 180.0;
+            double a = Math.Sin(dLat / 2.0) * Math.Sin(dLat / 2.0)
+                + Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0)
+                * Math.Sin(dLon / 2.0) * Math.Sin(dLon / 2.0);
+            double c = 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(Math.Max(0.0, 1.0 - a)));
+            return (int)Math.Round(r * c);
+        }
+
         private DetectionSnapshot ApplyStabilityAndAlerts(DetectionSnapshot result)
         {
-            var newIP = result.ClaudeExit.Ip;
-            var newCountry = result.ClaudeExit.CountryCode;
+            var now = result.UpdatedAt;
+            var newExit = result.ClaudeExit;
+            var newIP = newExit.Ip;
             var newNodeSig = result.Clash.Signature;
 
-            bool unexpectedCrossCountry = false;
-            bool unexpectedIPDrift = false;
+            _recentDrifts.RemoveAll(ev => (now - ev.Timestamp).TotalSeconds > 3600);
 
             if (!string.IsNullOrEmpty(newIP))
             {
-                if (!string.IsNullOrEmpty(_trackedExitIP) && newIP != _trackedExitIP)
+                if (_trackedExit != null && !string.IsNullOrEmpty(_trackedExit.Ip) && newIP != _trackedExit.Ip)
                 {
                     _sessionIPChangeCount++;
-                    _lastIPChangedAt = result.UpdatedAt.ToString("HH:mm:ss");
+                    _lastIPChangedAt = now.ToString("HH:mm:ss");
                     bool nodeChanged = newNodeSig != _trackedNodeSig;
-                    if (!nodeChanged)
+                    if (nodeChanged)
+                    {
+                        _recentDrifts.Clear();
+                    }
+                    else
                     {
                         _unexpectedDriftCount++;
-                        unexpectedIPDrift = true;
-                        if (!string.IsNullOrEmpty(_trackedExitCountry) && !string.IsNullOrEmpty(newCountry) && newCountry != _trackedExitCountry)
+                        var prev = _trackedExit;
+                        bool crossCountry = !string.IsNullOrEmpty(prev.CountryCode) && !string.IsNullOrEmpty(newExit.CountryCode)
+                            && !string.Equals(prev.CountryCode, newExit.CountryCode, StringComparison.OrdinalIgnoreCase);
+                        bool asnChanged = !string.IsNullOrEmpty(prev.Asn) && !string.IsNullOrEmpty(newExit.Asn)
+                            && !string.Equals(prev.Asn, newExit.Asn, StringComparison.OrdinalIgnoreCase);
+                        bool regionChanged = !string.IsNullOrEmpty(prev.Region) && !string.IsNullOrEmpty(newExit.Region)
+                            && !string.Equals(prev.Region, newExit.Region, StringComparison.OrdinalIgnoreCase);
+
+                        int? distKm = null;
+                        if (prev.Latitude.HasValue && prev.Longitude.HasValue
+                            && newExit.Latitude.HasValue && newExit.Longitude.HasValue)
                         {
-                            unexpectedCrossCountry = true;
+                            distKm = HaversineKm(prev.Latitude.Value, prev.Longitude.Value, newExit.Latitude.Value, newExit.Longitude.Value);
                         }
+
+                        string fromLabel = regionChanged
+                            ? (string.IsNullOrEmpty(prev.Region) ? prev.City : prev.Region)
+                            : (!string.IsNullOrEmpty(prev.City) ? prev.City : (!string.IsNullOrEmpty(prev.Region) ? prev.Region : prev.CountryCode));
+                        string toLabel = regionChanged
+                            ? (string.IsNullOrEmpty(newExit.Region) ? newExit.City : newExit.Region)
+                            : (!string.IsNullOrEmpty(newExit.City) ? newExit.City : (!string.IsNullOrEmpty(newExit.Region) ? newExit.Region : newExit.CountryCode));
+                        string routeText = (!string.IsNullOrEmpty(fromLabel) && !string.IsNullOrEmpty(toLabel))
+                            ? (fromLabel + " → " + toLabel)
+                            : "";
+
+                        CheckState severity;
+                        string detail;
+                        if (crossCountry)
+                        {
+                            severity = CheckState.Danger;
+                            detail = "跨国漂移：" + prev.CountryCode + " → " + newExit.CountryCode;
+                        }
+                        else if (distKm.HasValue && distKm.Value > 500)
+                        {
+                            severity = CheckState.Danger;
+                            detail = string.Format("超远跨城：{0}（约 {1}km）", routeText, distKm.Value);
+                        }
+                        else if (distKm.HasValue && distKm.Value > 80)
+                        {
+                            severity = CheckState.Warning;
+                            detail = string.Format("跨城漂移：{0}（约 {1}km）", routeText, distKm.Value);
+                        }
+                        else if (!distKm.HasValue && regionChanged)
+                        {
+                            severity = CheckState.Warning;
+                            detail = "跨区漂移：" + routeText;
+                        }
+                        else if (asnChanged)
+                        {
+                            severity = CheckState.Warning;
+                            detail = string.Format("跨运营商漂移（{0} → {1}）", prev.Asn, newExit.Asn);
+                        }
+                        else
+                        {
+                            severity = CheckState.Safe;
+                            string distPart = distKm.HasValue ? ("约 " + distKm.Value + "km · ") : "";
+                            detail = "同城微漂移（" + distPart + "正常家宽波动）";
+                        }
+
+                        _recentDrifts.Add(new DriftEvent
+                        {
+                            Timestamp = now,
+                            Severity = severity,
+                            DistanceKm = distKm,
+                            Route = routeText,
+                            Detail = detail
+                        });
                     }
                 }
-                _trackedExitIP = newIP;
-                _trackedExitCountry = newCountry;
+                _trackedExit = newExit;
                 _trackedNodeSig = newNodeSig;
             }
 
@@ -262,51 +350,89 @@ namespace ClaudeIPGuard
             {
                 SessionChangeCount = _sessionIPChangeCount,
                 UnexpectedDriftCount = _unexpectedDriftCount,
+                RecentDriftCount1h = _recentDrifts.Count,
                 LastChangedAt = _lastIPChangedAt
             };
 
-            if (unexpectedCrossCountry)
+            var latestEvent = _recentDrifts.LastOrDefault();
+            var worstDanger = _recentDrifts.LastOrDefault(ev => ev.Severity == CheckState.Danger);
+            var worstWarning = _recentDrifts.LastOrDefault(ev => ev.Severity == CheckState.Warning);
+            var best = worstDanger ?? worstWarning ?? latestEvent;
+            if (best != null)
+            {
+                stability.LastDriftDistanceKm = best.DistanceKm;
+                stability.LastDriftRoute = best.Route;
+            }
+
+            if (_recentDrifts.Count == 0)
+            {
+                stability.Status = CheckState.Safe;
+                stability.Label = _sessionIPChangeCount > 0
+                    ? string.Format("稳定 · 手动切换 {0} 次", _sessionIPChangeCount)
+                    : "稳定 · 无异常跳变";
+            }
+            else if (worstDanger != null)
             {
                 stability.Status = CheckState.Danger;
-                stability.Label = string.Format("未切节点跨国漂移（{0}次）", _unexpectedDriftCount);
-                result.RiskAlerts.Add("未切节点但出口 IP 跨国漂移至 " + newCountry);
+                stability.Label = worstDanger.Detail;
+                result.RiskAlerts.Add(worstDanger.Detail);
                 if (result.OverallLevel != OverallLevel.Danger)
                 {
                     result.OverallLevel = OverallLevel.Danger;
-                    result.OverallSummary = "出口 IP 异常跨国漂移（" + newCountry + "）";
+                    result.OverallSummary = worstDanger.Detail;
                 }
             }
-            else if (_unexpectedDriftCount > 0)
+            else if (_recentDrifts.Count >= 4)
+            {
+                stability.Status = CheckState.Danger;
+                stability.Label = string.Format("高频漂移（{0}次/1h）", _recentDrifts.Count);
+                result.RiskAlerts.Add(string.Format("1 小时内出口 IP 自动漂移 {0} 次（疑似动态轮换池）", _recentDrifts.Count));
+                if (result.OverallLevel != OverallLevel.Danger)
+                {
+                    result.OverallLevel = OverallLevel.Danger;
+                    result.OverallSummary = string.Format("1 小时内高频漂移 {0} 次", _recentDrifts.Count);
+                }
+            }
+            else if (worstWarning != null)
             {
                 stability.Status = CheckState.Warning;
-                stability.Label = string.Format("自动漂移 {0} 次{1}", _unexpectedDriftCount, string.IsNullOrEmpty(_lastIPChangedAt) ? "" : " · " + _lastIPChangedAt);
-                if (unexpectedIPDrift) result.RiskAlerts.Add("当前节点出口 IP 自动更换（动态/负载均衡）");
+                stability.Label = worstWarning.Detail;
+                result.RiskAlerts.Add(worstWarning.Detail);
                 if (result.OverallLevel == OverallLevel.Safe)
                 {
                     result.OverallLevel = OverallLevel.Warning;
-                    result.OverallSummary = "地区正常，但节点 IP 存在自动漂移";
+                    result.OverallSummary = worstWarning.Detail;
                 }
             }
-            else if (_sessionIPChangeCount > 0)
+            else if (_recentDrifts.Count >= 2)
             {
-                stability.Status = CheckState.Safe;
-                stability.Label = string.Format("稳定 · 手动切换 {0} 次", _sessionIPChangeCount);
+                stability.Status = CheckState.Warning;
+                stability.Label = string.Format("同城较频漂移（{0}次/1h）", _recentDrifts.Count);
+                result.RiskAlerts.Add(string.Format("1 小时内同城 IP 变动 {0} 次", _recentDrifts.Count));
+                if (result.OverallLevel == OverallLevel.Safe)
+                {
+                    result.OverallLevel = OverallLevel.Warning;
+                    result.OverallSummary = string.Format("1 小时内同城漂移 {0} 次", _recentDrifts.Count);
+                }
             }
             else
             {
                 stability.Status = CheckState.Safe;
-                stability.Label = "稳定 · 无异常跳变";
+                string kmStr = (latestEvent != null && latestEvent.DistanceKm.HasValue)
+                    ? ("约 " + latestEvent.DistanceKm.Value + "km · ")
+                    : "";
+                stability.Label = "同城微漂移（" + kmStr + "1次/1h · 正常）";
             }
 
             result.Stability = stability;
 
             if (AlertsEnabled && result.OverallLevel == OverallLevel.Danger)
             {
-                var now = DateTime.Now;
-                if (result.OverallSummary != _lastAlertSummary || (now - _lastAlertTime).TotalSeconds > 180)
+                var nowAlert = DateTime.Now;
+                if (result.OverallSummary != _lastAlertSummary || (nowAlert - _lastAlertTime).TotalSeconds > 180)
                 {
                     _lastAlertSummary = result.OverallSummary;
-                    _lastAlertTime = now;
+                    _lastAlertTime = nowAlert;
                     DangerAlertTriggered?.Invoke("ClaudeIPGuard 高危预警", result.OverallSummary);
                 }
             }
